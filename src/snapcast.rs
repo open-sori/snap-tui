@@ -1,63 +1,105 @@
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use tokio_tungstenite::connect_async;
 use uuid::Uuid;
 use futures::{SinkExt, StreamExt};
 
+// Main client struct
 #[derive(Debug)]
 pub struct SnapcastClient {
     url: String,
     pub status: Option<SnapcastStatus>,
 }
 
+// Response wrapper that matches the top-level JSON structure
 #[derive(Debug, Deserialize)]
+pub struct SnapcastResponse {
+    pub id: String,
+    pub jsonrpc: String,
+    pub result: SnapcastStatus,
+}
+
+// Main status container
+#[derive(Debug, Deserialize, Serialize)]
 pub struct SnapcastStatus {
     pub server: ServerStatus,
 }
 
-#[derive(Debug, Deserialize)]
+// Server status containing streams and groups
+#[derive(Debug, Deserialize, Serialize)]
 pub struct ServerStatus {
     pub server: ServerInfo,
     pub streams: Vec<Stream>,
+    pub groups: Vec<Group>,
 }
 
-#[derive(Debug, Deserialize)]
+// Server information
+#[derive(Debug, Deserialize, Serialize)]
 pub struct ServerInfo {
-    #[allow(dead_code)]
     pub host: HostInfo,
     pub snapserver: SnapserverInfo,
 }
 
-#[derive(Debug, Deserialize)]
+// Host information
+#[derive(Debug, Deserialize, Serialize)]
 pub struct HostInfo {
-    #[allow(dead_code)]
     pub name: String,
-    #[allow(dead_code)]
     pub os: String,
+    pub arch: String,
+    pub ip: String,
+    pub mac: String,
 }
 
-#[derive(Debug, Deserialize)]
+// Snapserver information
+#[derive(Debug, Deserialize, Serialize)]
 pub struct SnapserverInfo {
-    pub name: String,  // Now used in the UI
+    pub name: String,
     pub version: String,
+    #[serde(rename = "controlProtocolVersion")]
+    pub control_protocol_version: Option<u32>,
+    #[serde(rename = "protocolVersion")]
+    pub protocol_version: u32,
 }
 
-#[derive(Debug, Deserialize)]
+// Stream information
+#[derive(Debug, Deserialize, Serialize)]
 pub struct Stream {
-    #[allow(dead_code)]
-    id: String,
+    pub id: String,
     pub status: String,
     pub uri: Uri,
+    pub properties: StreamProperties,
 }
 
-#[derive(Debug, Deserialize)]
+// Stream properties
+#[derive(Debug, Deserialize, Serialize)]
+pub struct StreamProperties {
+    #[serde(rename = "canControl")]
+    pub can_control: bool,
+    #[serde(rename = "canPlay")]
+    pub can_play: bool,
+    #[serde(rename = "canPause")]
+    pub can_pause: bool,
+    #[serde(rename = "canSeek")]
+    pub can_seek: bool,
+    #[serde(rename = "canGoNext")]
+    pub can_go_next: bool,
+    #[serde(rename = "canGoPrevious")]
+    pub can_go_previous: bool,
+}
+
+// URI information
+#[derive(Debug, Deserialize, Serialize)]
 pub struct Uri {
     pub path: String,
     pub scheme: String,
     pub query: Query,
+    pub fragment: String,
+    pub host: String,
+    pub raw: String,
 }
 
-#[derive(Debug, Deserialize)]
+// URI query parameters
+#[derive(Debug, Deserialize, Serialize)]
 pub struct Query {
     pub name: String,
     #[serde(rename = "chunk_ms")]
@@ -66,6 +108,64 @@ pub struct Query {
     pub mode: Option<String>,
     #[serde(rename = "sampleformat")]
     pub sample_format: Option<String>,
+}
+
+// Group information
+#[derive(Debug, Deserialize, Serialize)]
+pub struct Group {
+    pub id: String,
+    pub name: String,
+    #[serde(rename = "stream_id")]
+    pub stream_id: String,
+    pub muted: bool,
+    pub clients: Vec<Client>,
+}
+
+// Client information
+#[derive(Debug, Deserialize, Serialize)]
+pub struct Client {
+    pub id: String,
+    #[serde(rename = "host")]
+    pub host: HostInfo,
+    #[serde(rename = "snapclient")]
+    pub snapclient: SnapclientInfo,
+    #[serde(rename = "config")]
+    pub config: ClientConfig,
+    pub connected: bool,
+    #[serde(rename = "lastSeen")]
+    pub last_seen: LastSeen,
+}
+
+// Client configuration
+#[derive(Debug, Deserialize, Serialize)]
+pub struct ClientConfig {
+    pub instance: u32,
+    pub latency: u32,
+    pub name: String,
+    pub volume: Volume,
+}
+
+// Volume information
+#[derive(Debug, Deserialize, Serialize)]
+pub struct Volume {
+    pub muted: bool,
+    pub percent: u32,
+}
+
+// Snapclient information
+#[derive(Debug, Deserialize, Serialize)]
+pub struct SnapclientInfo {
+    pub name: String,
+    #[serde(rename = "protocolVersion")]
+    pub protocol_version: u32,
+    pub version: String,
+}
+
+// Last seen timestamp
+#[derive(Debug, Deserialize, Serialize)]
+pub struct LastSeen {
+    pub sec: u64,
+    pub usec: u64,
 }
 
 impl SnapcastClient {
@@ -89,10 +189,9 @@ impl SnapcastClient {
         if let Some(msg) = read.next().await {
             match msg? {
                 tokio_tungstenite::tungstenite::Message::Text(text) => {
-                    let response: Value = serde_json::from_str(&text)?;
-                    if let Some(result) = response.get("result") {
-                        self.status = Some(serde_json::from_value(result.clone())?);
-                    }
+                    // First deserialize the full response
+                    let response: SnapcastResponse = serde_json::from_str(&text)?;
+                    self.status = Some(response.result);
                 }
                 _ => {}
             }

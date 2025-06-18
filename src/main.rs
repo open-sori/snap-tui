@@ -54,62 +54,78 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 async fn handle_input(app: &mut App, key: KeyEvent) -> Result<(), Box<dyn std::error::Error>> {
     match key.code {
-        KeyCode::Char('q') => app.should_quit = true,
-        KeyCode::Char('r') => {
-            app.snapcast_client.fetch_status().await?;
+        KeyCode::Char('q') => {
+            app.should_quit = true;
         }
-        KeyCode::Left | KeyCode::Right => {
-            // Switch tabs
-            let tab_count = 3; // We have 3 tabs
-            if key.code == KeyCode::Left {
-                app.current_tab = if app.current_tab > 0 {
-                    app.current_tab - 1
-                } else {
-                    tab_count - 1
-                };
-            } else {
-                app.current_tab = (app.current_tab + 1) % tab_count;
+        KeyCode::Char('h') | KeyCode::Left => {
+            // Handle tab navigation
+            if app.current_tab > 0 {
+                app.current_tab -= 1;
+                app.selected_item = None; // Reset selection when changing tabs
             }
         }
-        KeyCode::Down => {
-            if let Some(status) = &app.snapcast_client.status {
-                let item_count = match app.current_tab {
-                    0 => status.server.streams.len(),
-                    _ => 0,
-                };
-
-                if item_count > 0 {
-                    app.selected_item = Some(match app.selected_item {
-                        Some(selected) => {
-                            if selected + 1 < item_count {
-                                selected + 1
-                            } else {
-                                0
-                            }
-                        }
-                        None => 0,
-                    });
-                }
+        KeyCode::Char('l') | KeyCode::Right => {
+            // Handle tab navigation
+            if app.current_tab < 2 { // Assuming we have 3 tabs (0, 1, 2)
+                app.current_tab += 1;
+                app.selected_item = None; // Reset selection when changing tabs
             }
         }
         KeyCode::Up => {
+            // Handle list navigation
             if let Some(status) = &app.snapcast_client.status {
-                let item_count = match app.current_tab {
-                    0 => status.server.streams.len(),
-                    _ => 0,
-                };
-
-                if item_count > 0 {
-                    app.selected_item = Some(match app.selected_item {
-                        Some(selected) => {
+                match app.current_tab {
+                    0 => { // Streams tab
+                        if let Some(selected) = app.selected_item {
                             if selected > 0 {
-                                selected - 1
-                            } else {
-                                item_count - 1
+                                app.selected_item = Some(selected - 1);
                             }
+                        } else if !status.server.streams.is_empty() {
+                            app.selected_item = Some(0);
                         }
-                        None => 0,
-                    });
+                    }
+                    1 => { // Clients tab
+                        // Implement client navigation if needed
+                    }
+                    2 => { // Groups tab
+                        if let Some(selected) = app.selected_item {
+                            if selected > 0 {
+                                app.selected_item = Some(selected - 1);
+                            }
+                        } else if !status.server.groups.is_empty() {
+                            app.selected_item = Some(0);
+                        }
+                    }
+                    _ => {}
+                }
+            }
+        }
+        KeyCode::Down => {
+            // Handle list navigation
+            if let Some(status) = &app.snapcast_client.status {
+                match app.current_tab {
+                    0 => { // Streams tab
+                        if let Some(selected) = app.selected_item {
+                            if selected + 1 < status.server.streams.len() {
+                                app.selected_item = Some(selected + 1);
+                            }
+                        } else if !status.server.streams.is_empty() {
+                            app.selected_item = Some(0);
+                        }
+                    }
+                    1 => { // Clients tab
+                        // Implement client navigation if needed
+                    }
+                    2 => { // Groups tab
+                        if let Some(selected) = app.selected_item {
+                            if selected + 1 < status.server.groups.len() {
+                                app.selected_item = Some(selected + 1);
+                            }
+                        } else if !status.server.groups.is_empty() {
+                            app.selected_item = Some(0);
+                        }
+                    }
+                    _ => {}
                 }
             }
         }
