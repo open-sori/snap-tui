@@ -1,14 +1,14 @@
 use ratatui::{
-    Frame,
     layout::Rect,
-    style::{Color, Style, Modifier},
+    style::{Color, Modifier, Style},
     text::{Line, Span},
-    widgets::{Tabs, Block}
+    widgets::{Block, Borders, Tabs},
+    Frame,
 };
 use crate::App;
 
 pub fn draw_tabs(f: &mut Frame, area: Rect, app: &App) {
-    let tabs = vec!["Streams", "Clients", "Groups"];
+    let tabs = vec!["Groups", "Clients", "Streams"];
 
     let titles = tabs.iter().enumerate().map(|(i, t)| {
         let (first, rest) = t.split_at(1);
@@ -31,7 +31,7 @@ pub fn draw_tabs(f: &mut Frame, area: Rect, app: &App) {
     }).collect::<Vec<_>>();
 
     let tabs = Tabs::new(titles)
-        .block(Block::default().borders(ratatui::widgets::Borders::NONE))
+        .block(Block::default().borders(Borders::NONE))
         .style(Style::default().fg(Color::White))
         .highlight_style(Style::default().fg(Color::Green).add_modifier(Modifier::BOLD))
         .select(app.current_tab);

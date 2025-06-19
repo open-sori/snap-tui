@@ -1,5 +1,5 @@
 use serde::{Deserialize, Serialize};
-use serde_json::{json, Value};
+use serde_json::{json};
 use tokio_tungstenite::connect_async;
 use uuid::Uuid;
 use futures::{SinkExt, StreamExt};

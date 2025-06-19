@@ -11,9 +11,9 @@ pub fn draw_streams_list(f: &mut Frame, area: Rect, app: &App) {
     let list_area = area;
     let inner_list_area = Rect {
         x: list_area.x + 1,
-        y: list_area.y + 1,
-        width: list_area.width - 2,
-        height: list_area.height - 2,
+        y: list_area.y + 2,
+        width: list_area.width.saturating_sub(2),
+        height: list_area.height.saturating_sub(2),
     };
 
     // Calculate streams count for title
@@ -39,45 +39,46 @@ pub fn draw_streams_list(f: &mut Frame, area: Rect, app: &App) {
 
     if let Some(status) = &app.snapcast_client.status {
         let mut list_state = ListState::default();
-        if let Some(selected) = app.selected_item {
-            list_state.select(Some(selected));
-        }
+        list_state.select(app.selected_item);
 
         let items: Vec<ListItem> = status.server.streams
             .iter()
             .enumerate()
             .map(|(idx, stream)| {
                 let name = &stream.uri.query.name;
+                let prefix = if Some(idx) == app.selected_item {
+                    "> "  // Selection indicator
+                } else {
+                    "  "  // Regular indentation
+                };
+
                 let content = Line::from(vec![
-                    Span::styled(name, Style::default().fg(Color::White)),
+                    Span::styled(
+                        format!("{}{}", prefix, name),
+                        if Some(idx) == app.selected_item {
+                            Style::default()
+                                .fg(Color::Green)
+                                .add_modifier(Modifier::BOLD)
+                        } else {
+                            Style::default().fg(Color::White)
+                        }
+                    ),
                 ]);
 
-                if Some(idx) == app.selected_item {
-                    ListItem::new(content)
-                        .style(Style::default()
-                            .fg(Color::Green)
-                            .add_modifier(Modifier::BOLD)
-                            .add_modifier(Modifier::REVERSED))
-                } else {
-                    ListItem::new(content)
-                }
+                ListItem::new(content)
             })
             .collect();
 
         let list = List::new(items)
-            .block(Block::default().borders(Borders::NONE))
-            .highlight_style(
-                Style::default()
-                    .fg(Color::Green)
-                    .add_modifier(Modifier::BOLD)
-            )
-            .highlight_symbol("> ");
+            .block(Block::default().borders(Borders::NONE));
 
         // Render the centered title above the list
         f.render_widget(title_paragraph, list_area);
         f.render_stateful_widget(list, inner_list_area, &mut list_state);
     } else {
         let content = Paragraph::new("No data available. Press 'r' to refresh.")
+            .style(Style::default().fg(Color::White))
+            .alignment(Alignment::Center)
             .block(Block::default().borders(Borders::NONE));
 
         f.render_widget(title_paragraph, list_area);

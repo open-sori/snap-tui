@@ -32,9 +32,9 @@ pub fn ui(f: &mut Frame, app: &App) {
 
     // Draw content based on selected tab
     match app.current_tab {
-        0 => draw_streams(f, main_layout[2], app),
+        0 => draw_groups(f, main_layout[2], app),
         1 => draw_clients(f, main_layout[2], app),
-        2 => draw_groups(f, main_layout[2], app),
-        _ => draw_streams(f, main_layout[2], app),
+        2 => draw_streams(f, main_layout[2], app),
+        _ => draw_groups(f, main_layout[2], app),
     }
 }
