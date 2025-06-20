@@ -5,6 +5,7 @@ use ratatui::{
     style::{Color, Style},
     text::Span,
 };
+
 pub async fn handle_input(app: &mut App, key: KeyEvent) -> Result<(), Box<dyn std::error::Error>> {
     match key.code {
         KeyCode::Char('q') => {
@@ -22,6 +23,21 @@ pub async fn handle_input(app: &mut App, key: KeyEvent) -> Result<(), Box<dyn st
                 app.selected_item = None;
             }
         }
+        KeyCode::Char('g') => {
+            // Switch to Groups tab
+            app.current_tab = 0;
+            app.selected_item = None;
+        }
+        KeyCode::Char('c') => {
+            // Switch to Clients tab
+            app.current_tab = 1;
+                    app.selected_item = None;
+                }
+        KeyCode::Char('s') => {
+            // Switch to Streams tab
+            app.current_tab = 2;
+            app.selected_item = None;
+                    }
         KeyCode::Up => navigate_up(app),
         KeyCode::Down => navigate_down(app),
         KeyCode::Char('r') => {
@@ -42,8 +58,7 @@ pub async fn handle_input(app: &mut App, key: KeyEvent) -> Result<(), Box<dyn st
         _ => {}
     }
     Ok(())
-}
-
+        }
 fn navigate_up(app: &mut App) {
     if let Some(status) = &app.snapcast_client.status {
         match app.current_tab {
@@ -143,4 +158,3 @@ fn navigate_down(app: &mut App) {
         }
     }
 }
-
