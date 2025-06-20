@@ -3,7 +3,7 @@ pub mod snapcast;
 pub mod ui;
 
 use crossterm::{
-    event::{self, Event},
+    event::{self, Event, KeyCode},
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
@@ -11,13 +11,14 @@ use ratatui::prelude::*;
 use std::{
     env,
     io,
-    process,
+    time::Duration,
 };
 use clap::{Arg, Command};
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 const DEFAULT_HOST: &str = "127.0.0.1";
 const DEFAULT_PORT: &str = "1780";
+const RETRY_INTERVAL: Duration = Duration::from_secs(5);
 
 #[derive(Debug)]
 pub struct App {
@@ -25,6 +26,8 @@ pub struct App {
     pub snapcast_client: snapcast::SnapcastClient,
     pub selected_item: Option<usize>,
     pub current_tab: usize,
+    pub connection_error: Option<String>,
+    pub last_connection_attempt: std::time::Instant,
 }
 
 fn get_snapserver_host() -> String {
@@ -37,18 +40,15 @@ fn get_snapserver_port() -> String {
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // First check if the user just wants the version
-    let args: Vec<String> = env::args().collect();
-    if args.len() == 2 && args[1] == "version" {
-        println!("Version: v{}", VERSION);
-        process::exit(0);
-    }
-
     // Parse command line arguments
     let matches = Command::new("snap-tui")
-        .version(VERSION)
-        .author("Your Name <your.email@example.com>")
         .about("A TUI for Snapcast")
+        .arg(
+            Arg::new("version")
+                .long("version")
+                .action(clap::ArgAction::SetTrue)
+                .help("Prints version information")
+        )
         .arg(
             Arg::new("host")
                 .long("host")
@@ -65,12 +65,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         )
         .get_matches();
 
-    // Handle version flag (for --version or -V)
-    if matches.contains_id("version") {
+    // Check for version flag
+    if matches.get_flag("version") {
         println!("Version: v{}", VERSION);
-        process::exit(0);
+        return Ok(());
     }
-    
+
     // Get host and port with proper precedence
     let host = matches.get_one::<String>("host")
         .map(|s| s.clone())
@@ -94,22 +94,35 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         snapcast_client: snapcast::SnapcastClient::new(server_url),
         selected_item: None,
         current_tab: 0,
+        connection_error: None,
+        last_connection_attempt: std::time::Instant::now(),
     };
 
-    // Initial data fetch
-    if let Err(e) = app.snapcast_client.fetch_status().await {
-        eprintln!("Error fetching initial status: {}", e);
-        process::exit(1);
-    }
+    // Initial data fetch attempt
+    attempt_connection(&mut app).await;
 
     // Main loop
     while !app.should_quit {
+        // Draw UI
         terminal.draw(|f| ui::ui(f, &app))?;
 
+        // Handle input events
         if let Event::Key(key) = event::read()? {
+            // Always allow quitting with Ctrl+C or q
+            if key.code == KeyCode::Char('q') || key.code == KeyCode::Char('Q') {
+                app.should_quit = true;
+                continue;
+            }
+
             if let Err(e) = input::handle_input(&mut app, key).await {
                 eprintln!("Error handling input: {}", e);
             }
+        }
+
+        // Periodically retry connection if we had an error
+        if app.connection_error.is_some() &&
+           app.last_connection_attempt.elapsed() >= RETRY_INTERVAL {
+            attempt_connection(&mut app).await;
         }
     }
 
@@ -117,4 +130,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     disable_raw_mode()?;
     execute!(terminal.backend_mut(), LeaveAlternateScreen)?;
     Ok(())
+}
+
+async fn attempt_connection(app: &mut App) {
+    app.last_connection_attempt = std::time::Instant::now();
+    match app.snapcast_client.fetch_status().await {
+        Ok(_) => {
+            app.connection_error = None;
+            eprintln!("Successfully connected to Snapcast server!");
+        }
+        Err(e) => {
+            app.connection_error = Some(format!("Connection error: {}", e));
+            eprintln!("Warning: Could not connect to Snapcast server: {}", e);
+        }
+    }
 }
