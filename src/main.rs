@@ -3,7 +3,7 @@ pub mod snapcast;
 pub mod ui;
 
 use crossterm::{
-    event::{self, Event, KeyCode},
+    event::{self, Event, KeyCode, poll},
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
@@ -28,6 +28,26 @@ pub struct App {
     pub current_tab: usize,
     pub connection_error: Option<String>,
     pub last_connection_attempt: std::time::Instant,
+    pub error_message: Option<String>,
+    pub info_message: Option<String>, // Add this line for non-error messages
+}
+
+impl App {
+    pub async fn attempt_connection(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+        self.last_connection_attempt = std::time::Instant::now();
+        match self.snapcast_client.fetch_status().await {
+        Ok(_) => {
+                self.connection_error = None;
+    Ok(())
+}
+            Err(e) => {
+                let error_msg = format!("Connection error: {}", e);
+                self.connection_error = Some(error_msg.clone());
+                self.error_message = Some(error_msg);
+                Err(e)
+            }
+        }
+    }
 }
 
 fn get_snapserver_host() -> String {
@@ -96,52 +116,55 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         current_tab: 0,
         connection_error: None,
         last_connection_attempt: std::time::Instant::now(),
+        error_message: None,
+        info_message: None, // Add this line for non-error messages
     };
 
     // Initial data fetch attempt
-    attempt_connection(&mut app).await;
+    app.attempt_connection().await?;
 
     // Main loop
     while !app.should_quit {
         // Draw UI
         terminal.draw(|f| ui::ui(f, &app))?;
 
-        // Handle input events
-        if let Event::Key(key) = event::read()? {
-            // Always allow quitting with Ctrl+C or q
-            if key.code == KeyCode::Char('q') || key.code == KeyCode::Char('Q') {
-                app.should_quit = true;
-                continue;
-            }
+        // Handle input events with timeout to prevent blocking
+        if poll(Duration::from_millis(100))? {
+            if let Event::Key(key) = event::read()? {
+                // Always allow quitting with Ctrl+C or q
+                if key.code == KeyCode::Char('q') || key.code == KeyCode::Char('Q') {
+                    app.should_quit = true;
+                    continue;
+                }
 
-            if let Err(e) = input::handle_input(&mut app, key).await {
-                eprintln!("Error handling input: {}", e);
+                if let Err(e) = input::handle_input(&mut app, key).await {
+                    eprintln!("Error handling input: {}", e);
+                }
             }
         }
 
-        // Periodically retry connection if we had an error
-        if app.connection_error.is_some() &&
-           app.last_connection_attempt.elapsed() >= RETRY_INTERVAL {
-            attempt_connection(&mut app).await;
+        // Clear messages after they've been displayed for 3 seconds
+        if app.error_message.is_some() || app.info_message.is_some() {
+            if app.last_connection_attempt.elapsed() >= Duration::from_secs(3) {
+                app.error_message = None;
+                app.info_message = None;
+            }
         }
+
+        // Periodically retry connection if we're disconnected
+        if app.connection_error.is_some() && app.last_connection_attempt.elapsed() >= RETRY_INTERVAL {
+            if let Err(e) = app.attempt_connection().await {
+                app.error_message = Some(format!("Connection attempt failed: {}", e));
+                app.info_message = None;
+            } else {
+                app.info_message = Some("Connection attempt successful".to_string());
+                app.error_message = None;
+        }
+    }
     }
 
     // Cleanup terminal
     disable_raw_mode()?;
     execute!(terminal.backend_mut(), LeaveAlternateScreen)?;
     Ok(())
-}
-
-async fn attempt_connection(app: &mut App) {
-    app.last_connection_attempt = std::time::Instant::now();
-    match app.snapcast_client.fetch_status().await {
-        Ok(_) => {
-            app.connection_error = None;
-            eprintln!("Successfully connected to Snapcast server!");
-        }
-        Err(e) => {
-            app.connection_error = Some(format!("Connection error: {}", e));
-            eprintln!("Warning: Could not connect to Snapcast server: {}", e);
-        }
-    }
 }

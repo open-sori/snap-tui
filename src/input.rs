@@ -1,6 +1,10 @@
 use crossterm::event::{KeyCode, KeyEvent};
 use crate::App;
-
+use std::time::Duration;
+use ratatui::{
+    style::{Color, Style},
+    text::Span,
+};
 pub async fn handle_input(app: &mut App, key: KeyEvent) -> Result<(), Box<dyn std::error::Error>> {
     match key.code {
         KeyCode::Char('q') => {
@@ -21,8 +25,17 @@ pub async fn handle_input(app: &mut App, key: KeyEvent) -> Result<(), Box<dyn st
         KeyCode::Up => navigate_up(app),
         KeyCode::Down => navigate_down(app),
         KeyCode::Char('r') => {
-            if let Err(e) = app.snapcast_client.fetch_status().await {
-                eprintln!("Error refreshing Snapcast status: {}", e);
+            // Force a connection retry
+            app.last_connection_attempt = std::time::Instant::now().checked_sub(Duration::from_secs(60)).unwrap_or_else(|| std::time::Instant::now());
+            if let Err(e) = app.attempt_connection().await {
+                app.error_message = Some(format!("Error refreshing Snapcast status: {}", e));
+            } else {
+                app.error_message = Some(
+                    Span::styled(
+                        "Successfully refreshed Snapcast status",
+                        Style::default().fg(Color::Blue)
+                    ).content.into()
+                );
             }
             app.selected_item = None;
         }
@@ -130,3 +143,4 @@ fn navigate_down(app: &mut App) {
         }
     }
 }
+

@@ -3,6 +3,7 @@ mod tabs;
 mod streams;
 mod clients;
 mod groups;
+mod footer; // Add this line
 
 use ratatui::Frame;
 use crate::App;
@@ -12,6 +13,7 @@ pub use tabs::draw_tabs;
 pub use streams::draw_streams;
 pub use clients::draw_clients;
 pub use groups::draw_groups;
+pub use footer::draw_footer; // Add this line
 
 pub fn ui(f: &mut Frame, app: &App) {
     // Main vertical layout
@@ -21,6 +23,7 @@ pub fn ui(f: &mut Frame, app: &App) {
             ratatui::layout::Constraint::Length(3),  // Header
             ratatui::layout::Constraint::Length(1),  // Tabs
             ratatui::layout::Constraint::Min(1),     // Content
+            ratatui::layout::Constraint::Length(3),  // Footer for error messages (increased height)
         ])
         .split(f.size());
 
@@ -37,4 +40,7 @@ pub fn ui(f: &mut Frame, app: &App) {
         2 => draw_streams(f, main_layout[2], app),
         _ => draw_groups(f, main_layout[2], app),
     }
+
+    // Draw footer with error messages
+    draw_footer(f, main_layout[3], app);
 }

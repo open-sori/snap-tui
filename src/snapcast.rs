@@ -199,4 +199,8 @@ impl SnapcastClient {
 
         Ok(())
     }
+
+    pub fn get_url(&self) -> &str {
+        &self.url
+    }
 }
